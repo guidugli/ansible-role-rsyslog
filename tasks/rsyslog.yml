@@ -1,0 +1,151 @@
+---
+
+- name: Ensure rsyslog is installed
+  package:
+    name: "{{ rsyslog_package }}"
+    state: present
+    update_cache: yes
+
+- name: Enable and start Rsyslog
+  service:
+    name: rsyslog
+    enabled: yes
+    state: started
+
+# RedHat systems include rsyslog.d configuration then
+# set logging configuration AFTER. This new config
+# file have the include at the end of the file
+- name: Copy new configuration file
+  copy:
+    src: "rsyslog_{{ ansible_os_family }}.conf"
+    dest: "{{ rsyslog_conf_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+    force: yes
+    backup: yes
+
+- name: Ensure rsyslog default file permissions are configured
+  lineinfile:
+    path: "{{ rsyslog_conf_path }}"
+    regexp: '^\$FileCreateMode\s+'
+    line: "$FileCreateMode 0640"
+    mode: '0644'
+    create: yes
+    state: present
+
+# Replace default file
+- name: Ensure logging is configured
+  copy:
+    src: "{{ rsyslog_file }}"
+    dest: "{{ rsyslogd_path }}/50-default.conf"
+    owner: root
+    group: root
+    force: yes
+    mode: '0640'
+    backup: yes
+  when: rsyslog_file is defined
+
+- name: Configure system to send log to remote host
+  lineinfile:
+    path: "{{ rsyslogd_path }}/01-Forward.conf"
+    regexp: '^\*\.\*\saction\(type="omfwd"'
+    create: yes
+    mode: '0640'
+    line: >
+      *.* action(type="omfwd" target="{{ rsyslog_log_server }}" port="{{ rsyslog_port }}" protocol="tcp"
+      action.resumeRetryCount="{{ rsyslog_retry_count }}"
+      queue.type="linkList" queue.maxdiskspace="{{ rsyslog_max_disk_space }}"
+      queue.saveonshutdown="{{ rsyslog_save_on_shutdown }}" queue.filename="{{ rsyslog_queue_filename }}")
+    state: present
+  when: rsyslog_log_server is defined
+
+# Will use this list of configuration files in several places
+- name: "Find all rsyslog conf files in {{ rsyslogd_path }}"
+  find:
+    paths: "{{ rsyslogd_path }}"
+    patterns: "*.conf"
+  register: rsyslog_module_found
+
+# Don't want older syntax as it does not allow to use
+# advanced features to avoid losing messages when log
+# host is not online
+- name: Comment older syntax to send log to remote host
+  lineinfile:
+    path: "{{ item.path }}"
+    regexp: '^(\*\.\*\s@@.+)$'
+    line: '#\1'
+    backrefs: true
+  loop: "{{ rsyslog_module_found.files + [{ 'path': '/etc/rsyslog.conf' }] }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+
+- name: Configure target as non log host
+  block:
+    - name: Comment imtcp loading module on non log hosts (old syntax)
+      lineinfile:
+        dest: "{{ item.path }}"
+        regexp: '^(\$ModLoad\s+imtcp.*)$'
+        line: '#\1'
+        backrefs: true
+      loop: "{{ rsyslog_module_found.files + [{ 'path': '/etc/rsyslog.conf' }] }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Comment imtcp loading module on non log hosts (new syntax)
+      lineinfile:
+        dest: "{{ item.path }}"
+        regexp: '^(module\(load="(?:imudp|imtcp)"\).*)$'
+        line: '#\1'
+        backrefs: true
+      loop: "{{ rsyslog_module_found.files + [{ 'path': '/etc/rsyslog.conf' }] }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Comment TCP port listening on non log hosts (old syntax)
+      lineinfile:
+        dest: "{{ item.path }}"
+        regexp: '^(\$InputTCPServerRun.+)$'
+        line: '#\1'
+        backrefs: true
+      loop: "{{ rsyslog_module_found.files + [{ 'path': '/etc/rsyslog.conf' }] }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Comment TCP port listening on non log hosts (new syntax)
+      lineinfile:
+        dest: "{{ item.path }}"
+        regexp: '^(input\(type="(?:imudp|imtcp)" port=".+"\).*)$'
+        line: '#\1'
+        backrefs: true
+      loop: "{{ rsyslog_module_found.files + [{ 'path': '/etc/rsyslog.conf' }] }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+  when: not rsyslog_enable_log_host
+
+- name: Configure target as designated log host
+  block:
+    - name: Enable loading of imtcp module on log hosts
+      lineinfile:
+        dest: "{{ rsyslogd_path }}/10-loghost.conf"
+        regexp: '^#?\s*(module\(load="imtcp"\).*)$'
+        line: 'module(load="imtcp")'
+        create: yes
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: "Enable TCP Port listening on port {{ rsyslog_port }}"
+      lineinfile:
+        dest: "{{ rsyslogd_path }}/10-loghost.conf"
+        regexp: '^#?\s*(input\(type="(?:imudp|imtcp)" port=".+"\).*)$'
+        line: 'input(type="imtcp" port="{{ rsyslog_port }}")'
+        create: yes
+        owner: root
+        group: root
+        mode: 0644
+  when: rsyslog_enable_log_host
+  tags:
+    - RSYSLOG_LOG_HOSTS

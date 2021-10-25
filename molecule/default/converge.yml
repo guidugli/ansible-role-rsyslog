@@ -1,0 +1,19 @@
+---
+- name: Converge
+  hosts: all
+  vars:
+    rsyslog_log_server: loghost.example.com
+    rsyslog_retry_count: -1
+    rsyslog_max_disk_space: '1g'
+    rsyslog_save_on_shutdown: 'on'
+    rsyslog_queue_filename: 'fwdRule1'
+  pre_tasks:
+
+    - name: Update Debian system package list
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_pkg_mgr == "apt"
+
+  roles:
+    - role: guidugli.rsyslog

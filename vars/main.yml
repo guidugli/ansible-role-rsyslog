@@ -1,0 +1,13 @@
+---
+# vars file for rsyslog
+
+rsyslog_conf_path: /etc/rsyslog.conf
+rsyslogd_path: /etc/rsyslog.d
+
+_rsyslog_package:
+  default: ['rsyslog']
+
+rsyslog_package: "{{ _rsyslog_package[ansible_distribution ~ '-' ~ ansible_distribution_major_version] |
+                 default(_rsyslog_package[ansible_distribution]) | default(_rsyslog_package['default']) }}"
+
+rsyslog_file: "logrules_{{ ansible_os_family }}.conf"

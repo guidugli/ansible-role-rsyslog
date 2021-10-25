@@ -1,0 +1,31 @@
+---
+# defaults file for rsyslog
+
+# Port number will be use to configure system
+# sending and receiving logs
+rsyslog_port: 514
+
+# to accept logs from remote systems.
+rsyslog_enable_log_host: no
+
+## Optional data, if specified will configure
+#  system to send logs to a remote host
+# IMPORTANT: if rsyslog_log_server is specified
+# the other variables become mandatory
+
+# Specify remote host to send the logs to
+#rsyslog_log_server: loghost.example.com
+
+# Number of times to retry communication with
+# log host server. Set as -1 to do infinite
+# retries if host is down
+#rsyslog_retry_count: -1
+
+# Max disk space limit (use as much as possible)
+#rsyslog_max_disk_space: '1g'
+
+# save messages to disk on shutdown (on/off)
+#rsyslog_save_on_shutdown: 'on'
+
+# unique name prefix for spool files
+#rsyslog_queue_filename: 'fwdRule1'
