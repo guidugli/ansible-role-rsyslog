@@ -1,13 +1,13 @@
 ---
 
 - name: Ensure rsyslog is installed
-  package:
+  ansible.builtin.package:
     name: "{{ rsyslog_package }}"
     state: present
     update_cache: yes
 
 - name: Enable and start Rsyslog
-  service:
+  ansible.builtin.service:
     name: rsyslog
     enabled: yes
     state: started
@@ -16,7 +16,7 @@
 # set logging configuration AFTER. This new config
 # file have the include at the end of the file
 - name: Copy new configuration file
-  copy:
+  ansible.builtin.copy:
     src: "rsyslog_{{ ansible_os_family }}.conf"
     dest: "{{ rsyslog_conf_path }}"
     owner: root
@@ -26,7 +26,7 @@
     backup: yes
 
 - name: Ensure rsyslog default file permissions are configured
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: "{{ rsyslog_conf_path }}"
     regexp: '^\$FileCreateMode\s+'
     line: "$FileCreateMode 0640"
@@ -36,7 +36,7 @@
 
 # Replace default file
 - name: Ensure logging is configured
-  copy:
+  ansible.builtin.copy:
     src: "{{ rsyslog_file }}"
     dest: "{{ rsyslogd_path }}/50-default.conf"
     owner: root
@@ -47,7 +47,7 @@
   when: rsyslog_file is defined
 
 - name: Configure system to send log to remote host
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: "{{ rsyslogd_path }}/01-Forward.conf"
     regexp: '^\*\.\*\saction\(type="omfwd"'
     create: yes
@@ -62,7 +62,7 @@
 
 # Will use this list of configuration files in several places
 - name: "Find all rsyslog conf files in {{ rsyslogd_path }}"
-  find:
+  ansible.builtin.find:
     paths: "{{ rsyslogd_path }}"
     patterns: "*.conf"
   register: rsyslog_module_found
@@ -71,7 +71,7 @@
 # advanced features to avoid losing messages when log
 # host is not online
 - name: Comment older syntax to send log to remote host
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: "{{ item.path }}"
     regexp: '^(\*\.\*\s@@.+)$'
     line: '#\1'
@@ -84,7 +84,7 @@
 - name: Configure target as non log host
   block:
     - name: Comment imtcp loading module on non log hosts (old syntax)
-      lineinfile:
+      ansible.builtin.lineinfile:
         dest: "{{ item.path }}"
         regexp: '^(\$ModLoad\s+imtcp.*)$'
         line: '#\1'
@@ -94,7 +94,7 @@
         label: "{{ item.path }}"
 
     - name: Comment imtcp loading module on non log hosts (new syntax)
-      lineinfile:
+      ansible.builtin.lineinfile:
         dest: "{{ item.path }}"
         regexp: '^(module\(load="(?:imudp|imtcp)"\).*)$'
         line: '#\1'
@@ -104,7 +104,7 @@
         label: "{{ item.path }}"
 
     - name: Comment TCP port listening on non log hosts (old syntax)
-      lineinfile:
+      ansible.builtin.lineinfile:
         dest: "{{ item.path }}"
         regexp: '^(\$InputTCPServerRun.+)$'
         line: '#\1'
@@ -114,7 +114,7 @@
         label: "{{ item.path }}"
 
     - name: Comment TCP port listening on non log hosts (new syntax)
-      lineinfile:
+      ansible.builtin.lineinfile:
         dest: "{{ item.path }}"
         regexp: '^(input\(type="(?:imudp|imtcp)" port=".+"\).*)$'
         line: '#\1'
@@ -128,7 +128,7 @@
 - name: Configure target as designated log host
   block:
     - name: Enable loading of imtcp module on log hosts
-      lineinfile:
+      ansible.builtin.lineinfile:
         dest: "{{ rsyslogd_path }}/10-loghost.conf"
         regexp: '^#?\s*(module\(load="imtcp"\).*)$'
         line: 'module(load="imtcp")'
@@ -138,7 +138,7 @@
         mode: 0644
 
     - name: "Enable TCP Port listening on port {{ rsyslog_port }}"
-      lineinfile:
+      ansible.builtin.lineinfile:
         dest: "{{ rsyslogd_path }}/10-loghost.conf"
         regexp: '^#?\s*(input\(type="(?:imudp|imtcp)" port=".+"\).*)$'
         line: 'input(type="imtcp" port="{{ rsyslog_port }}")'
