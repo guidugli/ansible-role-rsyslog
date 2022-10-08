@@ -86,12 +86,13 @@
     regexp: '^(\*\.\*\s@@.+)$'
     line: '#\1'
     backrefs: true
-  loop: "{{ rsyslog_module_found.files + [{ 'path': '/etc/rsyslog.conf' }] }}"
+  loop: "{{ rsyslog_module_found.files + [{'path': '/etc/rsyslog.conf'}] }}"
   loop_control:
     label: "{{ item.path }}"
 
 
 - name: Configure target as non log host
+  when: not rsyslog_enable_log_host
   block:
     - name: Comment imtcp loading module on non log hosts (old syntax)
       ansible.builtin.lineinfile:
@@ -99,7 +100,7 @@
         regexp: '^(\$ModLoad\s+imtcp.*)$'
         line: '#\1'
         backrefs: true
-      loop: "{{ rsyslog_module_found.files + [{ 'path': '/etc/rsyslog.conf' }] }}"
+      loop: "{{ rsyslog_module_found.files + [{'path': '/etc/rsyslog.conf'}] }}"
       loop_control:
         label: "{{ item.path }}"
 
@@ -109,7 +110,7 @@
         regexp: '^(module\(load="(?:imudp|imtcp)"\).*)$'
         line: '#\1'
         backrefs: true
-      loop: "{{ rsyslog_module_found.files + [{ 'path': '/etc/rsyslog.conf' }] }}"
+      loop: "{{ rsyslog_module_found.files + [{'path': '/etc/rsyslog.conf'}] }}"
       loop_control:
         label: "{{ item.path }}"
 
@@ -119,7 +120,7 @@
         regexp: '^(\$InputTCPServerRun.+)$'
         line: '#\1'
         backrefs: true
-      loop: "{{ rsyslog_module_found.files + [{ 'path': '/etc/rsyslog.conf' }] }}"
+      loop: "{{ rsyslog_module_found.files + [{'path': '/etc/rsyslog.conf'}] }}"
       loop_control:
         label: "{{ item.path }}"
 
@@ -129,13 +130,14 @@
         regexp: '^(input\(type="(?:imudp|imtcp)" port=".+"\).*)$'
         line: '#\1'
         backrefs: true
-      loop: "{{ rsyslog_module_found.files + [{ 'path': '/etc/rsyslog.conf' }] }}"
+      loop: "{{ rsyslog_module_found.files + [{'path': '/etc/rsyslog.conf'}] }}"
       loop_control:
         label: "{{ item.path }}"
 
-  when: not rsyslog_enable_log_host
-
 - name: Configure target as designated log host
+  when: rsyslog_enable_log_host
+  tags:
+    - RSYSLOG_LOG_HOSTS
   block:
     - name: Enable loading of imtcp module on log hosts
       ansible.builtin.lineinfile:
@@ -156,6 +158,3 @@
         owner: root
         group: root
         mode: 0644
-  when: rsyslog_enable_log_host
-  tags:
-    - RSYSLOG_LOG_HOSTS
