@@ -10,4 +10,4 @@ _rsyslog_package:
 rsyslog_package: "{{ _rsyslog_package[ansible_distribution ~ '-' ~ ansible_distribution_major_version] |
                  default(_rsyslog_package[ansible_distribution]) | default(_rsyslog_package['default']) }}"
 
-rsyslog_file: "logrules_{{ ansible_os_family }}.conf"
+rsyslog_file: "logrules_{{ ansible_os_family }}.conf.j2"

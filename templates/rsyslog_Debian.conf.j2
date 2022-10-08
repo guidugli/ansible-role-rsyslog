@@ -40,13 +40,17 @@ $RepeatedMsgReduction on
 #
 # Set the default permissions for all log files.
 #
+{% if syslog_user_exists %}
 $FileOwner syslog
 $FileGroup adm
+{% endif %}
 $FileCreateMode 0640
 $DirCreateMode 0755
 $Umask 0022
+{% if syslog_user_exists %}
 $PrivDropToUser syslog
 $PrivDropToGroup syslog
+{% endif %}
 
 #
 # Where to place spool and state files

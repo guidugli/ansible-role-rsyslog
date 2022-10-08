@@ -32,8 +32,27 @@ global(workDirectory="/var/lib/rsyslog")
 # Use default timestamp format
 module(load="builtin:omfile" Template="RSYSLOG_TraditionalFileFormat")
 
+# Filter duplicated messages
+$RepeatedMsgReduction on
+
+{% if syslog_user_exists %}
+$FileOwner syslog
+$FileGroup adm
+{% endif %}
+
 # Create files with 0640 permission
 $FileCreateMode 0640
+
+# Create directories with 0755 permission
+$DirCreateMode 0755
+
+# Set umask
+$Umask 0022
+
+{% if syslog_user_exists %}
+$PrivDropToUser syslog
+$PrivDropToGroup syslog
+{% endif %}
 
 # Include all config files in /etc/rsyslog.d/
 include(file="/etc/rsyslog.d/*.conf" mode="optional")

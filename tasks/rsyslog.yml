@@ -6,6 +6,16 @@
     state: present
     update_cache: yes
 
+- name: Check if rsyslog user is present on the system
+  block:
+    - name: Gather available local users
+      ansible.builtin.getent:
+        database: passwd
+
+    - name: Check if syslog account exists
+      ansible.builtin.set_fact:
+        syslog_user_exists: "{{ 'syslog' in getent_passwd.keys() }}"
+
 - name: Enable and start Rsyslog
   ansible.builtin.service:
     name: rsyslog
@@ -16,8 +26,8 @@
 # set logging configuration AFTER. This new config
 # file have the include at the end of the file
 - name: Copy new configuration file
-  ansible.builtin.copy:
-    src: "rsyslog_{{ ansible_os_family }}.conf"
+  ansible.builtin.template:
+    src: "rsyslog_{{ ansible_os_family }}.conf.j2"
     dest: "{{ rsyslog_conf_path }}"
     owner: root
     group: root
@@ -36,7 +46,7 @@
 
 # Replace default file
 - name: Ensure logging is configured
-  ansible.builtin.copy:
+  ansible.builtin.template:
     src: "{{ rsyslog_file }}"
     dest: "{{ rsyslogd_path }}/50-default.conf"
     owner: root
