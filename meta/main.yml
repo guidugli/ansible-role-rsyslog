@@ -10,24 +10,18 @@ galaxy_info:
   min_ansible_version: '2.9'
 
   platforms:
-    - name: EL
-      versions:
-        - '9'
-        - '8'
-        - '7'
     - name: Fedora
       versions:
-        - '40'
-        - '39'
+        - '43'
+        - '42'
     - name: Ubuntu
       versions:
+        - noble
         - jammy
-        - focal
-        - bionic
     - name: Debian
       versions:
-        - bullseye
-        - buster
+        - trixie
+        - bookworm
 
   galaxy_tags:
     - rsyslog
