@@ -1,8 +1,13 @@
 ---
 # tasks file for rsyslog
 
-- name: Include assert.yml
-  ansible.builtin.include_tasks: assert.yml
+- name: Execute role tasks
+  block:
 
-- name: Include rsyslog.yml
-  ansible.builtin.include_tasks: rsyslog.yml
+  - name: Include assert.yml
+    ansible.builtin.include_tasks: assert.yml
+  
+  - name: Include rsyslog.yml
+    ansible.builtin.include_tasks: rsyslog.yml
+
+  become: yes
