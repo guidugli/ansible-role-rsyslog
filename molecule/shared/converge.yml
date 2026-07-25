@@ -1,0 +1,16 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: true
+  vars:
+    rsyslog_cis_level1_enabled: true
+    rsyslog_log_server: loghost.example.com
+    rsyslog_retry_count: -1
+    rsyslog_max_disk_space: "1g"
+    rsyslog_save_on_shutdown: "on"
+    rsyslog_queue_filename: fwdRule1
+    rsyslog_logrotate_frequency: weekly
+    rsyslog_logrotate_rotate: 13
+    rsyslog_logrotate_maxage: 90
+  roles:
+    - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"

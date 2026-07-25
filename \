@@ -1,0 +1,223 @@
+---
+- name: Ensure rsyslog is installed
+  ansible.builtin.package:
+    name: "{{ rsyslog_package }}"
+    state: present
+    update_cache: true
+  tags:
+    - rsyslog
+    - install
+
+- name: Ensure rsyslog configuration directory exists
+  ansible.builtin.file:
+    path: "{{ rsyslogd_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - rsyslog
+    - config
+
+- name: Gather available local users
+  ansible.builtin.getent:
+    database: passwd
+  tags:
+    - rsyslog
+    - config
+
+- name: Check whether syslog account exists
+  ansible.builtin.set_fact:
+    syslog_user_exists: "{{ 'syslog' in (getent_passwd | default({})).keys() }}"
+  changed_when: false
+  tags:
+    - rsyslog
+    - config
+
+- name: Enable and start rsyslog when systemd is available
+  ansible.builtin.service:
+    name: rsyslog
+    enabled: true
+    state: started
+  when: ansible_facts['service_mgr'] == 'systemd'
+  tags:
+    - rsyslog
+    - service
+
+# RedHat systems include /etc/rsyslog.d configuration before default rules.
+# This role keeps the include directive at the end of the main configuration.
+- name: Render main rsyslog configuration file
+  ansible.builtin.template:
+    src: "rsyslog_{{ ansible_facts['os_family'] }}.conf.j2"
+    dest: "{{ rsyslog_conf_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart rsyslog
+  tags:
+    - rsyslog
+    - config
+
+- name: Ensure rsyslog default file permissions are configured
+  ansible.builtin.lineinfile:
+    path: "{{ rsyslog_conf_path }}"
+    regexp: '^\$FileCreateMode\s+'
+    line: "$FileCreateMode 0640"
+    mode: "0644"
+    create: true
+    state: present
+  notify: Restart rsyslog
+  tags:
+    - rsyslog
+    - config
+
+- name: Render rsyslog default logging rules
+  ansible.builtin.template:
+    src: "{{ rsyslog_file }}"
+    dest: "{{ rsyslogd_path }}/50-default.conf"
+    owner: root
+    group: root
+    mode: "0640"
+    backup: true
+  notify: Restart rsyslog
+  tags:
+    - rsyslog
+    - config
+
+- name: Configure remote rsyslog forwarding
+  ansible.builtin.lineinfile:
+    path: "{{ rsyslogd_path }}/01-Forward.conf"
+    regexp: '^\*\.\*\saction\(type="omfwd"'
+    create: true
+    mode: "0640"
+    line: >-
+      *.* action(type="omfwd" target="{{ rsyslog_log_server }}" port="{{ rsyslog_port }}" protocol="tcp"
+      action.resumeRetryCount="{{ rsyslog_retry_count }}"
+      queue.type="linkedList" queue.maxdiskspace="{{ rsyslog_max_disk_space }}"
+      queue.saveonshutdown="{{ rsyslog_save_on_shutdown }}" queue.filename="{{ rsyslog_queue_filename }}")
+    state: present
+  when: rsyslog_log_server | length > 0
+  notify: Restart rsyslog
+  tags:
+    - rsyslog
+    - config
+
+- name: Find rsyslog drop-in configuration files
+  ansible.builtin.find:
+    paths: "{{ rsyslogd_path }}"
+    patterns: "*.conf"
+  register: rsyslog_module_found
+  tags:
+    - rsyslog
+    - config
+
+- name: Comment legacy remote forwarding syntax
+  ansible.builtin.lineinfile:
+    path: "{{ item.path }}"
+    regexp: '^(\*\.\*\s@@.+)$'
+    line: '#\1'
+    backrefs: true
+  loop: "{{ rsyslog_module_found.files + [{'path': rsyslog_conf_path}] }}"
+  loop_control:
+    label: "{{ item.path }}"
+  notify: Restart rsyslog
+  tags:
+    - rsyslog
+    - config
+
+- name: Disable log-host listener configuration on non-log hosts
+  when: not rsyslog_enable_log_host
+  tags:
+    - rsyslog
+    - config
+  block:
+    - name: Comment legacy imtcp module loading on non-log hosts
+      ansible.builtin.lineinfile:
+        dest: "{{ item.path }}"
+        regexp: '^(\$ModLoad\s+imtcp.*)$'
+        line: '#\1'
+        backrefs: true
+      loop: "{{ rsyslog_module_found.files + [{'path': rsyslog_conf_path}] }}"
+      loop_control:
+        label: "{{ item.path }}"
+      notify: Restart rsyslog
+      tags:
+        - rsyslog
+        - config
+
+    - name: Comment modern input module loading on non-log hosts
+      ansible.builtin.lineinfile:
+        dest: "{{ item.path }}"
+        regexp: '^(module\(load="(?:imudp|imtcp)"\).*)$'
+        line: '#\1'
+        backrefs: true
+      loop: "{{ rsyslog_module_found.files + [{'path': rsyslog_conf_path}] }}"
+      loop_control:
+        label: "{{ item.path }}"
+      notify: Restart rsyslog
+      tags:
+        - rsyslog
+        - config
+
+    - name: Comment legacy TCP listener on non-log hosts
+      ansible.builtin.lineinfile:
+        dest: "{{ item.path }}"
+        regexp: '^(\$InputTCPServerRun.+)$'
+        line: '#\1'
+        backrefs: true
+      loop: "{{ rsyslog_module_found.files + [{'path': rsyslog_conf_path}] }}"
+      loop_control:
+        label: "{{ item.path }}"
+      notify: Restart rsyslog
+      tags:
+        - rsyslog
+        - config
+
+    - name: Comment modern TCP or UDP listener on non-log hosts
+      ansible.builtin.lineinfile:
+        dest: "{{ item.path }}"
+        regexp: '^(input\(type="(?:imudp|imtcp)" port=".+"\).*)$'
+        line: '#\1'
+        backrefs: true
+      loop: "{{ rsyslog_module_found.files + [{'path': rsyslog_conf_path}] }}"
+      loop_control:
+        label: "{{ item.path }}"
+      notify: Restart rsyslog
+      tags:
+        - rsyslog
+        - config
+
+- name: Configure listener settings on designated log hosts
+  when: rsyslog_enable_log_host
+  tags:
+    - rsyslog
+    - config
+  block:
+    - name: Enable imtcp module on log hosts
+      ansible.builtin.lineinfile:
+        dest: "{{ rsyslogd_path }}/10-loghost.conf"
+        regexp: '^#?\s*(module\(load="imtcp"\).*)$'
+        line: 'module(load="imtcp")'
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart rsyslog
+      tags:
+        - rsyslog
+        - config
+
+    - name: Enable TCP listener on configured rsyslog port
+      ansible.builtin.lineinfile:
+        dest: "{{ rsyslogd_path }}/10-loghost.conf"
+        regexp: '^#?\s*(input\(type="(?:imudp|imtcp)" port=".+"\).*)$'
+        line: 'input(type="imtcp" port="{{ rsyslog_port }}")'
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart rsyslog
+      tags:
+        - rsyslog
+        - config

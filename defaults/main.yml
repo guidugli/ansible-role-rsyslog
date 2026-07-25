@@ -1,31 +1,56 @@
 ---
 # defaults file for rsyslog
 
-# Port number will be use to configure system
-# sending and receiving logs
+# Enable the opt-in CIS Ubuntu Level 1 client profile. When enabled, the role
+# requires remote forwarding, prevents receiver mode, and manages logrotate.
+rsyslog_cis_level1_enabled: false
+
+# TCP port used when this host accepts remote syslog messages or forwards
+# messages to a remote rsyslog endpoint.
 rsyslog_port: 514
 
-# to accept logs from remote systems.
-rsyslog_enable_log_host: no
+# Enable this host as a remote TCP log receiver. This must remain false when
+# rsyslog_cis_level1_enabled is true.
+rsyslog_enable_log_host: false
 
-## Optional data, if specified will configure
-#  system to send logs to a remote host
-# IMPORTANT: if rsyslog_log_server is specified
-# the other variables become mandatory
+# Remote rsyslog endpoint. It is required when the CIS Level 1 profile is enabled.
+rsyslog_log_server: ""
 
-# Specify remote host to send the logs to
-#rsyslog_log_server: loghost.example.com
+# Number of times to retry communication with the remote log server.
+# Use -1 for infinite retries when the remote host is unavailable.
+rsyslog_retry_count: -1
 
-# Number of times to retry communication with
-# log host server. Set as -1 to do infinite
-# retries if host is down
-#rsyslog_retry_count: -1
+# Maximum disk space used by the rsyslog action queue.
+rsyslog_max_disk_space: "1g"
 
-# Max disk space limit (use as much as possible)
-#rsyslog_max_disk_space: '1g'
+# Save queued messages to disk during shutdown. Valid values: on, off.
+rsyslog_save_on_shutdown: "on"
 
-# save messages to disk on shutdown (on/off)
-#rsyslog_save_on_shutdown: 'on'
+# Unique spool-file prefix for rsyslog forwarding queue files.
+rsyslog_queue_filename: "fwdRule1"
 
-# unique name prefix for spool files
-#rsyslog_queue_filename: 'fwdRule1'
+# Manage an rsyslog-specific logrotate policy. This is automatically enabled
+# when rsyslog_cis_level1_enabled is true.
+rsyslog_manage_logrotate: false
+rsyslog_logrotate_user: root
+rsyslog_logrotate_group: adm
+rsyslog_logrotate_frequency: weekly
+rsyslog_logrotate_rotate: 13
+rsyslog_logrotate_maxage: 90
+rsyslog_logrotate_compress: true
+rsyslog_logrotate_delaycompress: true
+rsyslog_logrotate_paths:
+  - /var/log/syslog
+  - /var/log/auth.log
+  - /var/log/cron.log
+  - /var/log/daemon.log
+  - /var/log/kern.log
+  - /var/log/mail.log
+  - /var/log/mail.info
+  - /var/log/mail.warn
+  - /var/log/mail.err
+  - /var/log/messages
+  - /var/log/secure
+  - /var/log/maillog
+  - /var/log/cron
+  - /var/log/warn

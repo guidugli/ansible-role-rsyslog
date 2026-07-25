@@ -5,9 +5,21 @@ rsyslog_conf_path: /etc/rsyslog.conf
 rsyslogd_path: /etc/rsyslog.d
 
 _rsyslog_package:
-  default: ['rsyslog']
+  default:
+    - rsyslog
 
-rsyslog_package: "{{ _rsyslog_package[ansible_distribution ~ '-' ~ ansible_distribution_major_version] |
-                 default(_rsyslog_package[ansible_distribution]) | default(_rsyslog_package['default']) }}"
+rsyslog_package: >-
+  {{ _rsyslog_package[ansible_facts['distribution'] ~ '-' ~ ansible_facts['distribution_major_version']]
+     | default(_rsyslog_package[ansible_facts['distribution']])
+     | default(_rsyslog_package['default']) }}
 
-rsyslog_file: "logrules_{{ ansible_os_family }}.conf.j2"
+rsyslog_file: "logrules_{{ ansible_facts['os_family'] }}.conf.j2"
+
+_rsyslog_logrotate_path:
+  Debian: /etc/logrotate.d/rsyslog
+  RedHat: /etc/logrotate.d/syslog
+  default: /etc/logrotate.d/rsyslog
+
+rsyslog_logrotate_path: >-
+  {{ _rsyslog_logrotate_path[ansible_facts['os_family']]
+     | default(_rsyslog_logrotate_path['default']) }}

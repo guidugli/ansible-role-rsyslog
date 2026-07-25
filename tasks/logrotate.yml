@@ -1,0 +1,19 @@
+---
+- name: Ensure logrotate is installed
+  ansible.builtin.package:
+    name: logrotate
+    state: present
+  tags:
+    - rsyslog
+    - install
+
+- name: Render rsyslog logrotate policy
+  ansible.builtin.template:
+    src: rsyslog.logrotate.j2
+    dest: "{{ rsyslog_logrotate_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  tags:
+    - rsyslog
+    - config

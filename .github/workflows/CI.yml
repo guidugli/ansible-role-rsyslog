@@ -1,81 +1,75 @@
 ---
 name: CI
 
-# Controls when the workflow will run
 'on':
-  pull_request:
   push:
-    branches: [ main ]
-
-  # Allows you to run this workflow manually from the Actions tab
+    branches:
+      - main
+  pull_request:
   workflow_dispatch:
-
   schedule:
-    - cron: "0 5 * * 0"
+    - cron: '0 5 * * 0'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/.ansible/collections
+  ANSIBLE_CONFIG: ${{ github.workspace }}/ansible.cfg
 
 jobs:
-
-  lint:
-    name: Lint
-    defaults:
-      run:
-        shell: bash
-        working-directory: ${{ vars.WORKING_DIR }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the codebase.
-        uses: actions/checkout@v5
-        with:
-          path: ${{ vars.WORKING_DIR }}
-
-      - name: Set up Python 3.
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-
-      - name: Install test dependencies.
-        run: pip3 install yamllint
-
-      - name: Lint code.
-        run: |
-          yamllint -c .yamllint .
-
   molecule:
-    name: Molecule
-    defaults:
-      run:
-        shell: bash
-        working-directory: ${{ vars.WORKING_DIR }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        distro:
-          - ubuntu2404
-          - ubuntu2204
-          - debian13
-          - debian12
-          - fedora43
-          - fedora42
+        scenario:
+          - default
+          - systemd
 
     steps:
+      - name: Check out the codebase
+        uses: actions/checkout@v6
 
-      - name: Check out the codebase.
-        uses: actions/checkout@v4
-        with:
-          path: ${{ vars.WORKING_DIR }}
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y podman python3 python3-venv
 
-      - name: Set up Python 3.
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
+      - name: Set up Python virtual environment
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements-dev.txt
+          mkdir -p .ansible/collections
+          .venv/bin/ansible-galaxy collection install -r requirements.yml -p .ansible/collections
 
-      - name: Install test dependencies.
-        run: pip3 install ansible molecule molecule-plugins[docker] docker netaddr
+      # yamllint disable rule:line-length
+      - name: Derive role FQCN from meta/main.yml
+        id: role_meta
+        run: |
+          fqcn=$(.venv/bin/python -c "from pathlib import Path; import yaml; meta=yaml.safe_load(Path('meta/main.yml').read_text(encoding='utf-8')) or {}; info=meta.get('galaxy_info', {}); namespace=info.get('namespace', '').strip(); role_name=info.get('role_name', '').strip(); assert namespace and role_name, 'namespace and role_name must be defined in meta/main.yml'; print(f'{namespace}.{role_name}')")
+          echo "fqcn=${fqcn}" >> "$GITHUB_OUTPUT"
+      # yamllint enable rule:line-length
 
-      - name: Run Molecule tests.
-        run: molecule test
+      - name: Expose current repo as Galaxy-style role path
+        run: |
+          mkdir -p .ansible/roles
+          ln -sfn "$PWD" ".ansible/roles/${{ steps.role_meta.outputs.fqcn }}"
+
+      - name: Regenerate inventories and metadata from committed shared vars
+        run: |
+          ./scripts/update_release_metadata.sh --skip-update-matrix
+
+      - name: Verify generated files are committed
+        run: git diff --exit-code
+
+      - name: Run yamllint
+        run: .venv/bin/yamllint .
+
+      - name: Run ansible-lint
+        run: .venv/bin/ansible-lint .
+
+      - name: Run Molecule
+        run: .venv/bin/molecule test -s ${{ matrix.scenario }}
         env:
           PY_COLORS: '1'
           ANSIBLE_FORCE_COLOR: '1'
-          MDRIVER: 'docker'
-          MOLECULE_DISTRO: ${{ matrix.distro }}

@@ -1,0 +1,29 @@
+---
+# Generated file. Do not edit directly.
+# Source template: {{ template_name }}
+
+dependencies: []
+galaxy_info:
+  role_name: rsyslog
+  namespace: guidugli
+  author: guidugli
+  company: Creuzo Tech
+  description: >-
+    Install and configure rsyslog, including local logging rules, optional TCP log reception,
+    and optional remote forwarding with queued delivery.
+  license: MIT
+  min_ansible_version: '2.14'
+  platforms:
+{% for platform in platforms %}
+    - name: {{ platform.name }}
+      versions:
+{%   for version in platform.versions %}
+        - {{ version | tojson }}
+{%   endfor %}
+{% endfor %}
+  galaxy_tags:
+    - rsyslog
+    - syslog
+    - logging
+    - linux
+    - monitoring

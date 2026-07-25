@@ -1,4 +1,14 @@
+# Ansible
 *.retry
-*/__pycache__
+
+# Python
+.venv/
+*/__pycache__/
 *.pyc
-.cache
+
+# Tool/cache dirs
+.cache/
+.molecule/
+
+# Ansible local role/cache
+.ansible/

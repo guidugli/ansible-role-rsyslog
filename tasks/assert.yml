@@ -1,31 +1,43 @@
 ---
-
-- name: Check mandatory variable values
+- name: Check mandatory rsyslog variable values
   ansible.builtin.assert:
     that:
       - rsyslog_file is defined
       - rsyslog_file is string
       - rsyslog_file | length > 0
-      - rsyslog_enable_log_host is defined
+      - rsyslog_cis_level1_enabled | type_debug == 'bool'
       - rsyslog_enable_log_host | type_debug == 'bool'
-      - rsyslog_port is defined
-      - rsyslog_port | int(-1) > 0
-    quiet: yes
-
-- name: Check send to log host variables if rsyslog_log_server is defined
-  ansible.builtin.assert:
-    that:
+      - rsyslog_port | int >= 1
+      - rsyslog_port | int <= 65535
       - rsyslog_log_server is string
-      - rsyslog_log_server | length > 0
-      - rsyslog_retry_count is defined
-      - rsyslog_retry_count | int(-2) > -2
-      - rsyslog_max_disk_space is defined
+      - rsyslog_retry_count | int >= -1
       - rsyslog_max_disk_space is string
       - rsyslog_max_disk_space | length > 0
-      - rsyslog_save_on_shutdown is defined
-      - rsyslog_save_on_shutdown in ['on','off']
-      - rsyslog_queue_filename is defined
-      - rsyslog_queue_filename is string
-      - rsyslog_queue_filename | length > 0
-    quiet: yes
-  when: rsyslog_log_server is defined
+      - rsyslog_save_on_shutdown in ['on', 'off']
+      - rsyslog_queue_filename is match('^[A-Za-z0-9_.-]+$')
+      - rsyslog_manage_logrotate | type_debug == 'bool'
+      - rsyslog_logrotate_frequency in ['daily', 'weekly', 'monthly']
+      - rsyslog_logrotate_rotate | int > 0
+      - rsyslog_logrotate_maxage | int > 0
+      - rsyslog_logrotate_compress | type_debug == 'bool'
+      - rsyslog_logrotate_delaycompress | type_debug == 'bool'
+      - rsyslog_logrotate_paths is sequence
+      - rsyslog_logrotate_paths | length > 0
+    quiet: true
+  tags:
+    - rsyslog
+    - validate
+
+- name: Validate CIS Ubuntu Level 1 client profile inputs
+  ansible.builtin.assert:
+    that:
+      - rsyslog_log_server | length > 0
+      - not rsyslog_enable_log_host
+    fail_msg: >-
+      The CIS Ubuntu Level 1 client profile requires rsyslog_log_server and
+      does not permit rsyslog_enable_log_host=true.
+    quiet: true
+  when: rsyslog_cis_level1_enabled
+  tags:
+    - rsyslog
+    - validate

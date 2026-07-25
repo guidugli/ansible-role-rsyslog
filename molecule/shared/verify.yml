@@ -1,0 +1,150 @@
+---
+- name: Verify rsyslog role
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Gather installed package facts
+      ansible.builtin.package_facts:
+        manager: auto
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate required packages are installed
+      ansible.builtin.assert:
+        that:
+          - "'rsyslog' in ansible_facts['packages']"
+          - "'logrotate' in ansible_facts['packages']"
+        quiet: true
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Check managed rsyslog files
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+      loop:
+        - path: /etc/rsyslog.conf
+          mode: "0644"
+        - path: /etc/rsyslog.d/50-default.conf
+          mode: "0640"
+        - path: /etc/rsyslog.d/01-Forward.conf
+          mode: "0640"
+        - path: >-
+            {{ '/etc/logrotate.d/rsyslog'
+               if ansible_facts['os_family'] == 'Debian'
+               else '/etc/logrotate.d/syslog' }}
+          mode: "0644"
+      register: rsyslog_managed_files
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate managed rsyslog files and permissions
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.mode == item.item.mode
+        quiet: true
+      loop: "{{ rsyslog_managed_files.results }}"
+      loop_control:
+        label: "{{ item.item.path }}"
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Read rsyslog main configuration
+      ansible.builtin.slurp:
+        src: /etc/rsyslog.conf
+      register: rsyslog_main_content
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Read rsyslog forwarding configuration
+      ansible.builtin.slurp:
+        src: /etc/rsyslog.d/01-Forward.conf
+      register: rsyslog_forward_content
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Read rsyslog logrotate configuration
+      ansible.builtin.slurp:
+        src: "{{ '/etc/logrotate.d/rsyslog' if ansible_facts['os_family'] == 'Debian' else '/etc/logrotate.d/syslog' }}"
+      register: rsyslog_logrotate_content
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate CIS Level 1 configuration semantics
+      vars:
+        rsyslog_main_text: "{{ rsyslog_main_content.content | b64decode }}"
+        rsyslog_forward_text: "{{ rsyslog_forward_content.content | b64decode }}"
+        rsyslog_logrotate_text: "{{ rsyslog_logrotate_content.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - "'$FileCreateMode 0640' in rsyslog_main_text"
+          - "'type=\"omfwd\"' in rsyslog_forward_text"
+          - "'target=\"loghost.example.com\"' in rsyslog_forward_text"
+          - "'protocol=\"tcp\"' in rsyslog_forward_text"
+          - "'queue.type=\"linkedList\"' in rsyslog_forward_text"
+          - "'maxage 90' in rsyslog_logrotate_text"
+          - "'rotate 13' in rsyslog_logrotate_text"
+        quiet: true
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Check role-owned listener configuration is absent in client mode
+      ansible.builtin.stat:
+        path: /etc/rsyslog.d/10-loghost.conf
+      register: rsyslog_listener_config
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate client mode does not deploy a listener configuration
+      ansible.builtin.assert:
+        that:
+          - not rsyslog_listener_config.stat.exists
+        quiet: true
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate rsyslog configuration syntax
+      ansible.builtin.command:
+        cmd: rsyslogd -N1
+      changed_when: false
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate logrotate configuration syntax
+      ansible.builtin.command:
+        cmd: >-
+          logrotate --debug
+          {{ '/etc/logrotate.d/rsyslog' if ansible_facts['os_family'] == 'Debian' else '/etc/logrotate.d/syslog' }}
+      changed_when: false
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Check rsyslog service state when systemd is active
+      ansible.builtin.service_facts:
+      when: ansible_facts['service_mgr'] == 'systemd'
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate rsyslog service is enabled and running
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['services']['rsyslog.service']['state'] == 'running'
+          - ansible_facts['services']['rsyslog.service']['status'] == 'enabled'
+        quiet: true
+      when: ansible_facts['service_mgr'] == 'systemd'
+      tags:
+        - rsyslog
+        - validate

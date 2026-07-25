@@ -1,0 +1,159 @@
+---
+- name: Prepare containers for systemd (install python + systemd)
+  hosts: all
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Detect OS (works without python)
+      ansible.builtin.raw: cat /etc/os-release
+      register: osr
+      changed_when: false
+
+    - name: Fail for unsupported distribution
+      ansible.builtin.assert:
+        that:
+          - >
+            'ID=debian' in osr.stdout or
+            'ID=ubuntu' in osr.stdout or
+            'ID=fedora' in osr.stdout
+        fail_msg: >-
+          Unsupported distro in molecule/systemd/prepare.yml.
+          Supported IDs: debian, ubuntu, fedora.
+        quiet: true
+
+    - name: Bootstrap Debian/Ubuntu (python + systemd)
+      ansible.builtin.raw: >-
+        /bin/sh -c 'set -e;
+        export DEBIAN_FRONTEND=noninteractive;
+        apt-get update;
+        apt-get install -y --no-install-recommends
+        python3 python3-apt systemd systemd-sysv dbus
+        ca-certificates iproute2'
+      when: "'ID=debian' in osr.stdout or 'ID=ubuntu' in osr.stdout"
+      changed_when: true
+
+    - name: Bootstrap Fedora (python + systemd)
+      ansible.builtin.raw: >-
+        /bin/sh -c 'set -e;
+        dnf -y install
+        python3 python3-dnf systemd dbus
+        ca-certificates iproute'
+      when: "'ID=fedora' in osr.stdout"
+      changed_when: true
+
+    - name: Detect systemd binary path inside container
+      ansible.builtin.raw: >-
+        /bin/sh -c 'set -e;
+        if [ -x /lib/systemd/systemd ]; then
+          echo /lib/systemd/systemd;
+        elif [ -x /usr/lib/systemd/systemd ]; then
+          echo /usr/lib/systemd/systemd;
+        elif [ -x /sbin/init ]; then
+          echo /sbin/init;
+        else
+          echo "";
+        fi'
+      register: systemd_path
+      changed_when: false
+
+    - name: Fail if systemd binary was not found after install
+      ansible.builtin.assert:
+        that:
+          - (systemd_path.stdout | trim | length) > 0
+        fail_msg: >-
+          systemd binary not found after install. Check package install output.
+        quiet: true
+
+    - name: Save systemd entrypoint as host fact (informational)
+      ansible.builtin.set_fact:
+        systemd_entrypoint: "{{ systemd_path.stdout | trim }}"
+      changed_when: false
+
+    - name: Reduce image size before commit (Debian/Ubuntu)
+      ansible.builtin.raw: >-
+        /bin/sh -c 'set -e;
+        apt-get clean;
+        rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*'
+      when: "'ID=debian' in osr.stdout or 'ID=ubuntu' in osr.stdout"
+      changed_when: true
+
+    - name: Reduce image size before commit (Fedora)
+      ansible.builtin.raw: >-
+        /bin/sh -c 'set -e;
+        dnf clean all;
+        rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*'
+      when: "'ID=fedora' in osr.stdout"
+      changed_when: true
+
+- name: Commit prepared containers into systemd-enabled images (local)
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Ensure there are containers to commit
+      ansible.builtin.assert:
+        that:
+          - (groups.get('molecule', []) | length) > 0
+        fail_msg: >-
+          No hosts found in group 'molecule'. Check
+          molecule/systemd/inventory/hosts.yml group naming.
+        quiet: true
+
+    - name: Commit each prepared container to a local image
+      ansible.builtin.command:
+        cmd: >-
+          podman commit {{ item }} localhost/molecule-systemd-{{ item }}:latest
+      loop: "{{ groups.get('molecule', []) }}"
+      changed_when: true
+
+    - name: Detect systemd path in each container
+      containers.podman.podman_container_exec:
+        name: "{{ item }}"
+        argv:
+          - /bin/sh
+          - -c
+          - >-
+            if [ -x /lib/systemd/systemd ]; then echo /lib/systemd/systemd;
+            elif [ -x /usr/lib/systemd/systemd ]; then echo /usr/lib/systemd/systemd;
+            elif [ -x /sbin/init ]; then echo /sbin/init;
+            else echo ""; fi
+      register: _systemd_detect
+      loop: "{{ groups.get('molecule', []) }}"
+      changed_when: false
+      failed_when: >-
+        (_systemd_detect.stdout | default('') | trim | length) == 0
+
+    - name: Build a map of container to systemd entrypoint
+      ansible.builtin.set_fact:
+        systemd_entrypoint_map: >-
+          {{
+            systemd_entrypoint_map | default({})
+            | combine({item.item: (item.stdout | trim)})
+          }}
+      loop: "{{ _systemd_detect.results }}"
+      changed_when: false
+
+    - name: Recreate containers with detected systemd entrypoint
+      containers.podman.podman_container:
+        name: "{{ item }}"
+        hostname: "{{ item }}"
+        image: "localhost/molecule-systemd-{{ item }}:latest"
+        command: "{{ systemd_entrypoint_map[item] }}"
+        privileged: true
+        volume:
+          - /sys/fs/cgroup:/sys/fs/cgroup:ro
+        tmpfs:
+          /run: rw
+          /tmp: rw
+        state: started
+        recreate: true
+      loop: "{{ groups.get('molecule', []) }}"
+
+- name: Check for role extra tasks
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Include shared prepare tasks if present
+      ansible.builtin.include_tasks: ../shared/prepare_tasks.yml
+      when: lookup('ansible.builtin.fileglob', '../shared/prepare_tasks.yml', wantlist=True) | length > 0

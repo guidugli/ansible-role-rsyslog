@@ -1,13 +1,23 @@
 ---
 # tasks file for rsyslog
 
-- name: Execute role tasks
-  block:
+- name: Include rsyslog input validation
+  ansible.builtin.include_tasks: assert.yml
+  tags:
+    - rsyslog
+    - validate
 
-  - name: Include assert.yml
-    ansible.builtin.include_tasks: assert.yml
-  
-  - name: Include rsyslog.yml
-    ansible.builtin.include_tasks: rsyslog.yml
+- name: Include rsyslog installation and configuration
+  ansible.builtin.include_tasks: rsyslog.yml
+  tags:
+    - rsyslog
+    - install
+    - config
+    - service
 
-  become: yes
+- name: Include rsyslog logrotate configuration
+  ansible.builtin.include_tasks: logrotate.yml
+  when: rsyslog_manage_logrotate or rsyslog_cis_level1_enabled
+  tags:
+    - rsyslog
+    - config

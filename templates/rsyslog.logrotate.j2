@@ -1,0 +1,20 @@
+# {{ ansible_managed }}
+
+{{ rsyslog_logrotate_paths | join(' ') }} {
+    {{ rsyslog_logrotate_frequency }}
+    rotate {{ rsyslog_logrotate_rotate }}
+    maxage {{ rsyslog_logrotate_maxage }}
+    su {{ rsyslog_logrotate_user }} {{ rsyslog_logrotate_group }}
+    missingok
+    notifempty
+{% if rsyslog_logrotate_compress %}
+    compress
+{% endif %}
+{% if rsyslog_logrotate_compress and rsyslog_logrotate_delaycompress %}
+    delaycompress
+{% endif %}
+    sharedscripts
+    postrotate
+        /usr/bin/systemctl kill -s HUP rsyslog.service >/dev/null 2>&1 || true
+    endscript
+}
