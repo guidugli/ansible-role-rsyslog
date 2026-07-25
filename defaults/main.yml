@@ -1,19 +1,19 @@
 ---
 # defaults file for rsyslog
 
-# Enable the opt-in CIS Ubuntu Level 1 client profile. When enabled, the role
-# requires remote forwarding, prevents receiver mode, and manages logrotate.
+# CIS Ubuntu rsyslog profile switches. Level 2 implies TLS forwarding controls.
 rsyslog_cis_level1_enabled: false
+rsyslog_cis_level2_enabled: false
 
 # TCP port used when this host accepts remote syslog messages or forwards
 # messages to a remote rsyslog endpoint.
 rsyslog_port: 514
 
 # Enable this host as a remote TCP log receiver. This must remain false when
-# rsyslog_cis_level1_enabled is true.
+# rsyslog_cis_level1_enabled or rsyslog_cis_level2_enabled is true.
 rsyslog_enable_log_host: false
 
-# Remote rsyslog endpoint. It is required when the CIS Level 1 profile is enabled.
+# Remote rsyslog endpoint. It is required when a CIS client profile is enabled.
 rsyslog_log_server: ""
 
 # Number of times to retry communication with the remote log server.
@@ -29,11 +29,18 @@ rsyslog_save_on_shutdown: "on"
 # Unique spool-file prefix for rsyslog forwarding queue files.
 rsyslog_queue_filename: "fwdRule1"
 
+# TLS forwarding. rsyslog_cis_level2_enabled enables this automatically.
+rsyslog_tls_enabled: false
+rsyslog_tls_ca_file: /etc/ssl/certs/ca-certificates.crt
+rsyslog_tls_stream_driver: gtls
+rsyslog_tls_stream_driver_mode: "1"
+rsyslog_tls_stream_driver_auth_mode: anon
+
 # Manage an rsyslog-specific logrotate policy. This is automatically enabled
-# when rsyslog_cis_level1_enabled is true.
+# when rsyslog_cis_level1_enabled or rsyslog_cis_level2_enabled is true.
 rsyslog_manage_logrotate: false
 rsyslog_logrotate_user: root
-rsyslog_logrotate_group: adm
+rsyslog_logrotate_group: auto
 rsyslog_logrotate_frequency: weekly
 rsyslog_logrotate_rotate: 13
 rsyslog_logrotate_maxage: 90

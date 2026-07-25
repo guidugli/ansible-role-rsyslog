@@ -3,90 +3,138 @@ argument_specs:
   main:
     short_description: Install and configure rsyslog.
     description:
-      - Installs rsyslog and manages local logging, optional TCP log host mode, remote forwarding, and log rotation.
-      - Provides an opt-in CIS Ubuntu Level 1 client profile.
+      - >-
+        Installs rsyslog and manages local logging, optional TCP log host mode,
+        remote forwarding, TLS forwarding, and log rotation.
+      - Provides opt-in CIS Ubuntu Level 1 and Level 2 rsyslog client profiles.
     options:
       rsyslog_cis_level1_enabled:
         type: bool
-        default: false
         description:
           - Enable the CIS Ubuntu Level 1 client profile.
-          - Requires a remote log server, disables receiver mode, and manages logrotate.
+        default: false
+      rsyslog_cis_level2_enabled:
+        type: bool
+        description:
+          - Enable the CIS Ubuntu Level 2 TLS forwarding profile.
+        default: false
       rsyslog_port:
         type: int
-        default: 514
         description:
           - TCP port used for remote syslog reception or forwarding.
+        default: 514
       rsyslog_enable_log_host:
         type: bool
-        default: false
         description:
           - Whether this host should accept remote TCP syslog messages.
+        default: false
       rsyslog_log_server:
         type: str
-        default: ""
         description:
-          - Remote rsyslog server. Leave empty to skip forwarding outside the CIS profile.
+          - Remote rsyslog server. Leave empty to skip forwarding outside CIS profiles.
+        default: ''
       rsyslog_retry_count:
         type: int
-        default: -1
         description:
           - Number of forwarding retries. Use -1 for infinite retries.
+        default: -1
       rsyslog_max_disk_space:
         type: str
-        default: "1g"
         description:
           - Maximum disk space for the rsyslog forwarding queue.
+        default: 1g
       rsyslog_save_on_shutdown:
         type: str
-        default: "on"
         choices:
-          - "on"
-          - "off"
+          - 'on'
+          - 'off'
         description:
           - Whether queued messages are saved to disk during shutdown.
+        default: 'on'
       rsyslog_queue_filename:
         type: str
-        default: fwdRule1
         description:
           - Prefix used for rsyslog forwarding queue spool files.
+        default: fwdRule1
+      rsyslog_tls_enabled:
+        type: bool
+        description:
+          - Enable TLS settings for rsyslog forwarding.
+        default: false
+      rsyslog_tls_ca_file:
+        type: str
+        description:
+          - CA certificate file for rsyslog TLS forwarding.
+        default: /etc/ssl/certs/ca-certificates.crt
+      rsyslog_tls_stream_driver:
+        type: str
+        choices:
+          - gtls
+        description:
+          - Rsyslog stream driver for encrypted forwarding.
+        default: gtls
+      rsyslog_tls_stream_driver_mode:
+        type: str
+        choices:
+          - '1'
+        description:
+          - Rsyslog stream driver mode for TLS forwarding.
+        default: '1'
+      rsyslog_tls_stream_driver_auth_mode:
+        type: str
+        description:
+          - Rsyslog stream driver authentication mode.
+        default: anon
       rsyslog_manage_logrotate:
         type: bool
-        default: false
         description:
           - Manage an rsyslog-specific logrotate policy.
+        default: false
+      rsyslog_logrotate_user:
+        type: str
+        description:
+          - User used in the logrotate su directive.
+        default: root
+      rsyslog_logrotate_group:
+        type: str
+        description:
+          - Group used in the logrotate su directive.
+          - Use auto to select the distribution-family default group.
+        default: auto
       rsyslog_logrotate_frequency:
         type: str
-        default: weekly
         choices:
           - daily
           - weekly
           - monthly
         description:
           - Rotation frequency for managed rsyslog log files.
+        default: weekly
       rsyslog_logrotate_rotate:
         type: int
-        default: 13
         description:
           - Number of rotated log files to retain.
+        default: 13
       rsyslog_logrotate_maxage:
         type: int
-        default: 90
         description:
           - Maximum age in days for rotated logs.
+        default: 90
       rsyslog_logrotate_compress:
         type: bool
-        default: true
         description:
           - Compress rotated log files.
+        default: true
       rsyslog_logrotate_delaycompress:
         type: bool
-        default: true
         description:
           - Delay compression until the next rotation cycle.
+        default: true
       rsyslog_logrotate_paths:
         type: list
         elements: str
+        description:
+          - Log files covered by the managed logrotate policy.
         default:
           - /var/log/syslog
           - /var/log/auth.log
@@ -102,13 +150,3 @@ argument_specs:
           - /var/log/maillog
           - /var/log/cron
           - /var/log/warn
-        description:
-          - Log files covered by the managed logrotate policy.
-
-      rsyslog_logrotate_user:
-        type: str
-        default: root
-
-      rsyslog_logrotate_group:
-        type: str
-        default: adm

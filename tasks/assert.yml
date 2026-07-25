@@ -6,6 +6,7 @@
       - rsyslog_file is string
       - rsyslog_file | length > 0
       - rsyslog_cis_level1_enabled | type_debug == 'bool'
+      - rsyslog_cis_level2_enabled | type_debug == 'bool'
       - rsyslog_enable_log_host | type_debug == 'bool'
       - rsyslog_port | int >= 1
       - rsyslog_port | int <= 65535
@@ -15,7 +16,19 @@
       - rsyslog_max_disk_space | length > 0
       - rsyslog_save_on_shutdown in ['on', 'off']
       - rsyslog_queue_filename is match('^[A-Za-z0-9_.-]+$')
+      - "'/' not in rsyslog_queue_filename"
+      - rsyslog_tls_enabled | type_debug == 'bool'
+      - rsyslog_tls_ca_file is string
+      - rsyslog_tls_ca_file | length > 0
+      - rsyslog_tls_stream_driver == 'gtls'
+      - rsyslog_tls_stream_driver_mode == '1'
+      - rsyslog_tls_stream_driver_auth_mode is string
+      - rsyslog_tls_stream_driver_auth_mode | length > 0
       - rsyslog_manage_logrotate | type_debug == 'bool'
+      - rsyslog_logrotate_user is string
+      - rsyslog_logrotate_user | length > 0
+      - rsyslog_logrotate_group is string
+      - rsyslog_logrotate_group | length > 0
       - rsyslog_logrotate_frequency in ['daily', 'weekly', 'monthly']
       - rsyslog_logrotate_rotate | int > 0
       - rsyslog_logrotate_maxage | int > 0
@@ -28,16 +41,29 @@
     - rsyslog
     - validate
 
-- name: Validate CIS Ubuntu Level 1 client profile inputs
+- name: Validate CIS rsyslog client profile inputs
   ansible.builtin.assert:
     that:
       - rsyslog_log_server | length > 0
       - not rsyslog_enable_log_host
     fail_msg: >-
-      The CIS Ubuntu Level 1 client profile requires rsyslog_log_server and
-      does not permit rsyslog_enable_log_host=true.
+      The CIS rsyslog client profiles require rsyslog_log_server and do not
+      permit rsyslog_enable_log_host=true.
     quiet: true
-  when: rsyslog_cis_level1_enabled
+  when: rsyslog_cis_level1_enabled or rsyslog_cis_level2_enabled
+  tags:
+    - rsyslog
+    - validate
+
+- name: Validate CIS Level 2 TLS package support
+  ansible.builtin.assert:
+    that:
+      - rsyslog_tls_package | length > 0
+    fail_msg: >-
+      TLS forwarding was requested but no rsyslog TLS package is mapped for
+      this operating system family.
+    quiet: true
+  when: rsyslog_tls_effective_enabled
   tags:
     - rsyslog
     - validate

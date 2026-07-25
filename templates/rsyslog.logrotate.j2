@@ -4,7 +4,7 @@
     {{ rsyslog_logrotate_frequency }}
     rotate {{ rsyslog_logrotate_rotate }}
     maxage {{ rsyslog_logrotate_maxage }}
-    su {{ rsyslog_logrotate_user }} {{ rsyslog_logrotate_group }}
+    su {{ rsyslog_logrotate_user }} {{ rsyslog_logrotate_effective_group }}
     missingok
     notifempty
 {% if rsyslog_logrotate_compress %}

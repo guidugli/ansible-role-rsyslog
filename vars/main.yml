@@ -13,6 +13,20 @@ rsyslog_package: >-
      | default(_rsyslog_package[ansible_facts['distribution']])
      | default(_rsyslog_package['default']) }}
 
+_rsyslog_tls_package:
+  Debian:
+    - rsyslog-gnutls
+  RedHat:
+    - rsyslog-gnutls
+  default: []
+
+rsyslog_tls_package: >-
+  {{ _rsyslog_tls_package[ansible_facts['os_family']]
+     | default(_rsyslog_tls_package['default']) }}
+
+rsyslog_tls_effective_enabled: >-
+  {{ rsyslog_tls_enabled or rsyslog_cis_level2_enabled }}
+
 rsyslog_file: "logrules_{{ ansible_facts['os_family'] }}.conf.j2"
 
 _rsyslog_logrotate_path:
@@ -23,3 +37,14 @@ _rsyslog_logrotate_path:
 rsyslog_logrotate_path: >-
   {{ _rsyslog_logrotate_path[ansible_facts['os_family']]
      | default(_rsyslog_logrotate_path['default']) }}
+
+_rsyslog_logrotate_group:
+  Debian: adm
+  RedHat: root
+  default: root
+
+rsyslog_logrotate_effective_group: >-
+  {{ _rsyslog_logrotate_group[ansible_facts['os_family']]
+     | default(_rsyslog_logrotate_group['default'])
+     if rsyslog_logrotate_group == 'auto'
+     else rsyslog_logrotate_group }}

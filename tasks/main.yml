@@ -17,7 +17,10 @@
 
 - name: Include rsyslog logrotate configuration
   ansible.builtin.include_tasks: logrotate.yml
-  when: rsyslog_manage_logrotate or rsyslog_cis_level1_enabled
+  when: >-
+    rsyslog_manage_logrotate or
+    rsyslog_cis_level1_enabled or
+    rsyslog_cis_level2_enabled
   tags:
     - rsyslog
     - config

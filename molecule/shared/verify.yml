@@ -2,6 +2,15 @@
 - name: Verify rsyslog role
   hosts: all
   gather_facts: true
+  vars:
+    rsyslog_logrotate_verify_path: >-
+      {{ '/etc/logrotate.d/rsyslog'
+         if ansible_facts['os_family'] == 'Debian'
+         else '/etc/logrotate.d/syslog' }}
+    rsyslog_logrotate_verify_group: >-
+      {{ 'adm' if ansible_facts['os_family'] == 'Debian' else 'root' }}
+    rsyslog_tls_expected: "{{ ansible_facts['os_family'] == 'Debian' }}"
+    rsyslog_expected_port: "{{ '6514' if ansible_facts['os_family'] == 'Debian' else '514' }}"
   tasks:
     - name: Gather installed package facts
       ansible.builtin.package_facts:
@@ -20,31 +29,48 @@
         - rsyslog
         - validate
 
+    - name: Validate TLS support package is installed for Level 2 hosts
+      ansible.builtin.assert:
+        that:
+          - "'rsyslog-gnutls' in ansible_facts['packages']"
+        quiet: true
+      when: rsyslog_tls_expected
+      tags:
+        - rsyslog
+        - validate
+
     - name: Check managed rsyslog files
       ansible.builtin.stat:
         path: "{{ item.path }}"
       loop:
         - path: /etc/rsyslog.conf
           mode: "0644"
+          owner: root
+          group: root
         - path: /etc/rsyslog.d/50-default.conf
           mode: "0640"
+          owner: root
+          group: root
         - path: /etc/rsyslog.d/01-Forward.conf
           mode: "0640"
-        - path: >-
-            {{ '/etc/logrotate.d/rsyslog'
-               if ansible_facts['os_family'] == 'Debian'
-               else '/etc/logrotate.d/syslog' }}
+          owner: root
+          group: root
+        - path: "{{ rsyslog_logrotate_verify_path }}"
           mode: "0644"
+          owner: root
+          group: root
       register: rsyslog_managed_files
       tags:
         - rsyslog
         - validate
 
-    - name: Validate managed rsyslog files and permissions
+    - name: Validate managed rsyslog files, ownership, and permissions
       ansible.builtin.assert:
         that:
           - item.stat.exists
           - item.stat.mode == item.item.mode
+          - item.stat.pw_name == item.item.owner
+          - item.stat.gr_name == item.item.group
         quiet: true
       loop: "{{ rsyslog_managed_files.results }}"
       loop_control:
@@ -69,28 +95,128 @@
         - rsyslog
         - validate
 
+    - name: Read rsyslog default drop-in configuration
+      ansible.builtin.slurp:
+        src: /etc/rsyslog.d/50-default.conf
+      register: rsyslog_default_content
+      tags:
+        - rsyslog
+        - validate
+
     - name: Read rsyslog logrotate configuration
       ansible.builtin.slurp:
-        src: "{{ '/etc/logrotate.d/rsyslog' if ansible_facts['os_family'] == 'Debian' else '/etc/logrotate.d/syslog' }}"
+        src: "{{ rsyslog_logrotate_verify_path }}"
       register: rsyslog_logrotate_content
       tags:
         - rsyslog
         - validate
 
-    - name: Validate CIS Level 1 configuration semantics
+    - name: Validate rsyslog main configuration semantics
       vars:
         rsyslog_main_text: "{{ rsyslog_main_content.content | b64decode }}"
-        rsyslog_forward_text: "{{ rsyslog_forward_content.content | b64decode }}"
-        rsyslog_logrotate_text: "{{ rsyslog_logrotate_content.content | b64decode }}"
       ansible.builtin.assert:
         that:
           - "'$FileCreateMode 0640' in rsyslog_main_text"
-          - "'type=\"omfwd\"' in rsyslog_forward_text"
-          - "'target=\"loghost.example.com\"' in rsyslog_forward_text"
-          - "'protocol=\"tcp\"' in rsyslog_forward_text"
-          - "'queue.type=\"linkedList\"' in rsyslog_forward_text"
-          - "'maxage 90' in rsyslog_logrotate_text"
+          - "'$DirCreateMode 0755' in rsyslog_main_text"
+          - "'$Umask 0022' in rsyslog_main_text"
+        quiet: true
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate rsyslog default logging rules are present
+      vars:
+        rsyslog_default_text: "{{ rsyslog_default_content.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - "'/var/log/auth.log' in rsyslog_default_text or '/var/log/secure' in rsyslog_default_text"
+          - "'/var/log/messages' in rsyslog_default_text"
+          - "':omusrmsg:' in rsyslog_default_text"
+        quiet: true
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate remote forwarding configuration semantics
+      vars:
+        rsyslog_forward_text: "{{ rsyslog_forward_content.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            'type="omfwd"' in rsyslog_forward_text
+          - >-
+            'target="loghost.example.com"' in rsyslog_forward_text
+          - >-
+            'port="' ~ rsyslog_expected_port ~ '"' in rsyslog_forward_text
+          - >-
+            'protocol="tcp"' in rsyslog_forward_text
+          - >-
+            'action.resumeRetryCount="-1"' in rsyslog_forward_text
+          - >-
+            'queue.type="linkedList"' in rsyslog_forward_text
+          - >-
+            'queue.maxdiskspace="1g"' in rsyslog_forward_text
+          - >-
+            'queue.saveonshutdown="on"' in rsyslog_forward_text
+          - >-
+            'queue.filename="fwdRule1"' in rsyslog_forward_text
+        quiet: true
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate TLS forwarding configuration semantics for Level 2 hosts
+      vars:
+        rsyslog_forward_text: "{{ rsyslog_forward_content.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            'DefaultNetstreamDriverCAFile="/etc/ssl/certs/ca-certificates.crt"' in rsyslog_forward_text
+          - >-
+            'StreamDriver="gtls"' in rsyslog_forward_text
+          - >-
+            'StreamDriverMode="1"' in rsyslog_forward_text
+          - >-
+            'StreamDriverAuthMode="anon"' in rsyslog_forward_text
+        quiet: true
+      when: rsyslog_tls_expected
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate plaintext forwarding does not use TLS on non-Level 2 hosts
+      vars:
+        rsyslog_forward_text: "{{ rsyslog_forward_content.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            'StreamDriver="gtls"' not in rsyslog_forward_text
+          - >-
+            'DefaultNetstreamDriverCAFile=' not in rsyslog_forward_text
+        quiet: true
+      when: not rsyslog_tls_expected
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate rsyslog logrotate policy semantics
+      vars:
+        rsyslog_logrotate_text: "{{ rsyslog_logrotate_content.content | b64decode }}"
+        rsyslog_expected_su: "su root {{ rsyslog_logrotate_verify_group }}"
+      ansible.builtin.assert:
+        that:
+          - "'weekly' in rsyslog_logrotate_text"
           - "'rotate 13' in rsyslog_logrotate_text"
+          - "'maxage 90' in rsyslog_logrotate_text"
+          - rsyslog_expected_su in rsyslog_logrotate_text
+          - "'missingok' in rsyslog_logrotate_text"
+          - "'notifempty' in rsyslog_logrotate_text"
+          - "'compress' in rsyslog_logrotate_text"
+          - "'delaycompress' in rsyslog_logrotate_text"
+          - "'sharedscripts' in rsyslog_logrotate_text"
+          - "'postrotate' in rsyslog_logrotate_text"
+          - "'systemctl kill -s HUP rsyslog.service' in rsyslog_logrotate_text"
+          - "'endscript' in rsyslog_logrotate_text"
         quiet: true
       tags:
         - rsyslog
@@ -123,9 +249,7 @@
 
     - name: Validate logrotate configuration syntax
       ansible.builtin.command:
-        cmd: >-
-          logrotate --debug
-          {{ '/etc/logrotate.d/rsyslog' if ansible_facts['os_family'] == 'Debian' else '/etc/logrotate.d/syslog' }}
+        cmd: "logrotate --debug {{ rsyslog_logrotate_verify_path }}"
       changed_when: false
       tags:
         - rsyslog
@@ -138,11 +262,30 @@
         - rsyslog
         - validate
 
-    - name: Validate rsyslog service is enabled and running
+    - name: Validate rsyslog service is running when systemd is active
       ansible.builtin.assert:
         that:
           - ansible_facts['services']['rsyslog.service']['state'] == 'running'
-          - ansible_facts['services']['rsyslog.service']['status'] == 'enabled'
+        quiet: true
+      when: ansible_facts['service_mgr'] == 'systemd'
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Check rsyslog service enabled state when systemd is active  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: systemctl is-enabled rsyslog.service
+      register: rsyslog_enabled_state
+      changed_when: false
+      when: ansible_facts['service_mgr'] == 'systemd'
+      tags:
+        - rsyslog
+        - validate
+
+    - name: Validate rsyslog service is enabled when systemd is active
+      ansible.builtin.assert:
+        that:
+          - rsyslog_enabled_state.stdout == 'enabled'
         quiet: true
       when: ansible_facts['service_mgr'] == 'systemd'
       tags:

@@ -1,9 +1,8 @@
 ---
 # handlers file for rsyslog
-
 - name: Restart rsyslog
   ansible.builtin.systemd_service:
-    name: rsyslog
+    name: rsyslog.service
     state: restarted
   when: ansible_facts['service_mgr'] == 'systemd'
   tags:

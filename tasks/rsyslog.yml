@@ -8,6 +8,15 @@
     - rsyslog
     - install
 
+- name: Ensure rsyslog TLS support package is installed
+  ansible.builtin.package:
+    name: "{{ rsyslog_tls_package }}"
+    state: present
+  when: rsyslog_tls_effective_enabled
+  tags:
+    - rsyslog
+    - install
+
 - name: Ensure rsyslog configuration directory exists
   ansible.builtin.file:
     path: "{{ rsyslogd_path }}"
@@ -28,11 +37,35 @@
 
 - name: Check whether syslog account exists
   ansible.builtin.set_fact:
-    syslog_user_exists: "{{ 'syslog' in (getent_passwd | default({})).keys() }}"
+    syslog_user_exists: >-
+      {{ 'syslog' in (ansible_facts['getent_passwd'] | default({})) }}
   changed_when: false
   tags:
     - rsyslog
     - config
+
+- name: Check rsyslog TLS CA certificate file
+  ansible.builtin.stat:
+    path: "{{ rsyslog_tls_ca_file }}"
+  register: rsyslog_tls_ca_file_stat
+  when: rsyslog_tls_effective_enabled
+  tags:
+    - rsyslog
+    - validate
+
+- name: Validate rsyslog TLS CA certificate file
+  ansible.builtin.assert:
+    that:
+      - rsyslog_tls_ca_file_stat.stat.exists
+      - rsyslog_tls_ca_file_stat.stat.isreg
+    fail_msg: >-
+      rsyslog TLS forwarding requires rsyslog_tls_ca_file to point to an
+      existing regular CA certificate file.
+    quiet: true
+  when: rsyslog_tls_effective_enabled
+  tags:
+    - rsyslog
+    - validate
 
 - name: Ensure rsyslog is unmasked, enabled, and active when systemd is available
   ansible.builtin.systemd_service:
@@ -86,20 +119,13 @@
     - rsyslog
     - config
 
-- name: Configure remote rsyslog forwarding
-  ansible.builtin.lineinfile:
-    path: "{{ rsyslogd_path }}/01-Forward.conf"
-    regexp: '^\*\.\*\saction\(type="omfwd"'
-    create: true
+- name: Render remote rsyslog forwarding configuration
+  ansible.builtin.template:
+    src: 01-Forward.conf.j2
+    dest: "{{ rsyslogd_path }}/01-Forward.conf"
     owner: root
     group: root
     mode: "0640"
-    line: >-
-      *.* action(type="omfwd" target="{{ rsyslog_log_server }}" port="{{ rsyslog_port }}" protocol="tcp"
-      action.resumeRetryCount="{{ rsyslog_retry_count }}"
-      queue.type="linkedList" queue.maxdiskspace="{{ rsyslog_max_disk_space }}"
-      queue.saveonshutdown="{{ rsyslog_save_on_shutdown }}" queue.filename="{{ rsyslog_queue_filename }}")
-    state: present
   when: rsyslog_log_server | length > 0
   notify: Restart rsyslog
   tags:

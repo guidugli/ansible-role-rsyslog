@@ -1,0 +1,22 @@
+# {{ ansible_managed }}
+{% if rsyslog_tls_effective_enabled %}
+global(
+    DefaultNetstreamDriverCAFile="{{ rsyslog_tls_ca_file }}"
+)
+{% endif %}
+*.* action(
+    type="omfwd"
+    target="{{ rsyslog_log_server }}"
+    port="{{ rsyslog_port }}"
+    protocol="tcp"
+{% if rsyslog_tls_effective_enabled %}
+    StreamDriver="{{ rsyslog_tls_stream_driver }}"
+    StreamDriverMode="{{ rsyslog_tls_stream_driver_mode }}"
+    StreamDriverAuthMode="{{ rsyslog_tls_stream_driver_auth_mode }}"
+{% endif %}
+    action.resumeRetryCount="{{ rsyslog_retry_count }}"
+    queue.type="linkedList"
+    queue.maxdiskspace="{{ rsyslog_max_disk_space }}"
+    queue.saveonshutdown="{{ rsyslog_save_on_shutdown }}"
+    queue.filename="{{ rsyslog_queue_filename }}"
+)

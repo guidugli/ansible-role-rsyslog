@@ -4,7 +4,10 @@
   gather_facts: true
   vars:
     rsyslog_cis_level1_enabled: true
+    rsyslog_cis_level2_enabled: "{{ ansible_facts['os_family'] == 'Debian' }}"
+    rsyslog_tls_enabled: "{{ ansible_facts['os_family'] == 'Debian' }}"
     rsyslog_log_server: loghost.example.com
+    rsyslog_port: "{{ 6514 if ansible_facts['os_family'] == 'Debian' else 514 }}"
     rsyslog_retry_count: -1
     rsyslog_max_disk_space: "1g"
     rsyslog_save_on_shutdown: "on"
